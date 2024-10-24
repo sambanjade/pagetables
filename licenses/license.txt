@@ -1,1 +1,9 @@
-License considered
+GNU License
+At first, I thought to use GNU license for my software as without any restrictions, you can use it for anything even commercial use. This was appealing because I wished my code to affect many people who would use it. But as I learned that in order to use GNU license I have to share all my code with anybody, which I feel is not right.
+ This is why I would like to keep my code personal because if it were open source someone can use it without consulting me about it.
+ Apache License
+ After this, I considered the Apache license. It also permits free of my software and does not compel me to release my code to the public domain, which is much better. Nonetheless, the disadvantage of using Apache is that the alterations made to the code need to be documented. 
+ I don’t like this because people who use my code should not need to track the modifications.
+ MIT License
+ In the end, I identified the MIT license as probably the best one for me. As with Apache, my code doesn’t have to be open source and changes don’t have to be documented which is nice and simple–which is good. 
+ To have to include the original license and copyright notice with any the software copy maybe a small price to pay given the freedom and simplicity that the MIT license provides.

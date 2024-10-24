@@ -29,11 +29,11 @@ size_t ptbr = 0;
 #define VPN_BITS (ADDRESS_BITS - POBITS)
 
 static size_t level_bits[LEVELS];
-static void init_level_bits(void);
-static size_t get_index(size_t vpn, size_t level);
 static int initialized = 0;
 
-
+static size_t* allocate_page_table(void);
+static void init_level_bits(void);
+static size_t calculate_index(size_t va, size_t level);
 
 size_t translate(size_t va)
 {
@@ -47,31 +47,25 @@ size_t translate(size_t va)
 
     size_t offset = va & PAGE_OFFSET_MASK;
     size_t vpn = va >> POBITS;
-    size_t *page_table = (size_t *)ptbr;
+    size_t *current_table = (size_t *)ptbr;
 
-    for (size_t level = 0; level < LEVELS; level++) {
-        size_t index = get_index(vpn, level);
+    for (size_t level = 0; level < LEVELS - 1; level++) {
+        size_t index = calculate_index(va, level);
 
-        if (index >= PTE_COUNT) {
-            return ~0UL; 
-        }
-
-        size_t pte = page_table[index];
-
-        if ((pte & VALID_BIT) == 0) {
+        if ((current_table[index] & VALID_BIT) == 0) {
             return ~0UL;
         }
 
-        size_t next_level_address = (pte >> POBITS) << POBITS;
-
-        if (level == LEVELS - 1) {
-            return next_level_address | offset;
-        } else {
-            page_table = (size_t *)next_level_address;
-        }
+        current_table = (size_t *)(current_table[index] & ~VALID_BIT);
     }
 
-    return ~0UL;
+    size_t index = calculate_index(va, LEVELS - 1);
+    if ((current_table[index] & VALID_BIT) == 0) {
+        return ~0UL;
+    }
+
+    size_t physical_page_number = current_table[index] >> POBITS;
+    return (physical_page_number << POBITS) | offset;
 }
 
 void page_allocate(size_t va)
@@ -81,46 +75,35 @@ void page_allocate(size_t va)
     }
 
     if (ptbr == 0) {
-        if (posix_memalign((void **)&ptbr, PAGE_SIZE, PAGE_SIZE) != 0) {
+        ptbr = (size_t)allocate_page_table();
+        if (ptbr == 0) {
             exit(EXIT_FAILURE);
         }
-        memset((void *)ptbr, 0, PAGE_SIZE);
     }
 
     size_t vpn = va >> POBITS;
-    size_t *page_table = (size_t *)ptbr;
+    size_t *current_table = (size_t *)ptbr;
 
-    for (size_t level = 0; level < LEVELS; level++) {
-        size_t index = get_index(vpn, level);
+    for (size_t level = 0; level < LEVELS - 1; level++) {
+        size_t index = calculate_index(va, level);
 
-        if (index >= PTE_COUNT) {
-            return; 
-        }
-
-        size_t pte = page_table[index];
-
-        if ((pte & VALID_BIT) == 0) {
-            void *next_level = NULL;
-
-            if (posix_memalign(&next_level, PAGE_SIZE, PAGE_SIZE) != 0) {
-                exit(EXIT_FAILURE);
+        if ((current_table[index] & VALID_BIT) == 0) {
+            size_t *new_table = allocate_page_table();
+            if (new_table == NULL) {
+                return;
             }
-            memset(next_level, 0, PAGE_SIZE);
-
-            size_t next_level_pn = ((size_t)next_level) >> POBITS;
-            pte = (next_level_pn << POBITS) | VALID_BIT;
-            page_table[index] = pte;
+            current_table[index] = (size_t)new_table | VALID_BIT;
         }
 
-        size_t next_level_address = (pte >> POBITS) << POBITS;
+        current_table = (size_t *)(current_table[index] & ~VALID_BIT);
+    }
 
-        if (level == LEVELS - 1) {
-            break;
-        } else {
-            page_table = (size_t *)next_level_address;
-        }
+    size_t index = calculate_index(va, LEVELS - 1);
+    if ((current_table[index] & VALID_BIT) == 0) {
+        current_table[index] = (size_t)allocate_page_table() | VALID_BIT;
     }
 }
+
 static void init_level_bits(void)
 {
     size_t total_vpn_bits = VPN_BITS;
@@ -136,12 +119,20 @@ static void init_level_bits(void)
     initialized = 1;
 }
 
-static size_t get_index(size_t vpn, size_t level)
+static size_t* allocate_page_table(void)
 {
-    size_t shift = 0;
-    for (size_t i = level + 1; i < LEVELS; i++) {
-        shift += level_bits[i];
+    void* new_page;
+    if (posix_memalign(&new_page, PAGE_SIZE, PAGE_SIZE) != 0) {
+        perror("posix_memalign failed");
+        return NULL;
     }
-    size_t mask = (1UL << level_bits[level]) - 1;
-    return (vpn >> shift) & mask;
+    memset(new_page, 0, PAGE_SIZE);
+    return (size_t*)new_page;
+}
+
+static size_t calculate_index(size_t va, size_t level)
+{
+    size_t shift_amount = POBITS + (LEVELS - 1 - level) * (POBITS - 3);
+    size_t index_mask = (1 << (POBITS - 3)) - 1;
+    return (va >> shift_amount) & index_mask;
 }
