@@ -23,3 +23,8 @@ size_t translate(size_t va);
  */
 void page_allocate(size_t va);
 #endif //MLPT_H
+
+/**
+ * Frees memory associated with the given virtual address and updates the page table accordingly.
+ */
+void page_deallocate(size_t va);

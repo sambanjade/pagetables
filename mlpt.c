@@ -8,19 +8,19 @@
 #include <malloc.h>
 
 size_t ptbr = 0;
-
+//defined by the config file
 #define MAX_LEVELS 6
 #define MIN_POBITS 4
 #define MAX_POBITS 18
-
+//error checking for the levels and bits
 #if LEVELS < 1 || LEVELS > MAX_LEVELS
 #error "LEVELS must be between 1 and 6 inclusive."
 #endif
-
+//error checking for the bits
 #if POBITS < MIN_POBITS || POBITS > MAX_POBITS
 #error "POBITS must be between 4 and 18 inclusive."
 #endif
-
+//defining the page size and the number of page table entries
 #define PAGE_SIZE (1UL << POBITS)
 #define PTE_COUNT (PAGE_SIZE / sizeof(size_t))
 #define VALID_BIT 0x1
@@ -30,7 +30,7 @@ size_t ptbr = 0;
 
 static size_t level_bits[LEVELS];
 static int initialized = 0;
-
+//helper methods
 static size_t* allocate_page_table(void);
 static void init_level_bits(void);
 static size_t calculate_index(size_t va, size_t level);
@@ -38,10 +38,10 @@ static size_t calculate_index(size_t va, size_t level);
 size_t translate(size_t va)
 {
     if (!initialized) {
-        init_level_bits();
+        init_level_bits(); //always initalize if its not initalized to start off 
     }
 
-    if (ptbr == 0) {
+    if (ptbr == 0) { //if page table is not  allocated return -1 for invalid address
         return ~0UL;
     }
 
@@ -104,7 +104,7 @@ void page_allocate(size_t va)
     }
 }
 
-static void init_level_bits(void)
+static void init_level_bits(void) //helper  method for initizligin the bits of the table
 {
     size_t total_vpn_bits = VPN_BITS;
     size_t base_bits_per_level = total_vpn_bits / LEVELS;
@@ -122,7 +122,7 @@ static void init_level_bits(void)
 static size_t* allocate_page_table(void)
 {
     void* new_page;
-    if (posix_memalign(&new_page, PAGE_SIZE, PAGE_SIZE) != 0) {
+    if (posix_memalign(&new_page, PAGE_SIZE, PAGE_SIZE) != 0) { //allocate mem for page table 
         perror("posix_memalign failed");
         return NULL;
     }
@@ -130,9 +130,44 @@ static size_t* allocate_page_table(void)
     return (size_t*)new_page;
 }
 
-static size_t calculate_index(size_t va, size_t level)
+static size_t calculate_index(size_t va, size_t level) //helper method for caluclating indices of the page table
 {
     size_t shift_amount = POBITS + (LEVELS - 1 - level) * (POBITS - 3);
     size_t index_mask = (1 << (POBITS - 3)) - 1;
     return (va >> shift_amount) & index_mask;
+}
+
+
+#include <stdlib.h>
+
+
+void page_deallocate(size_t va) {
+    \
+    size_t *current_table = (size_t *)ptbr;
+    if (current_table == NULL)
+     {
+        return; // No tables allocated, nothing to deallocate
+    }
+
+    for (int level = 0; level < LEVELS; ++level) 
+    {
+        size_t index = (va >> (POBITS * (LEVELS - level - 1))) & ((1 << (POBITS - 3)) - 1);
+        size_t entry = current_table[index];
+
+        if ((entry & 1) == 0) //basic check if the entry is valid 
+        {
+            return; 
+        }
+
+        if (level == LEVELS - 1) 
+        {
+            
+            free((void *)(entry & ~(size_t)0xFFF));
+            current_table[index] = 0; 
+        } else 
+        {
+            
+            current_table = (size_t *)(entry & ~(size_t)0xFFF);
+        }
+    }
 }
